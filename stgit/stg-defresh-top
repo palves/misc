@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Based on
+# <https://mail.gna.org/public/stgit-users/2011-02/msg00009.html># by
+# Marc Herbert.
+#
+# Transfers all hunks from the top patch, into the workspace.  This
+# command is for restarting the work on the top patch from scratch.
+# Technically it blanks the top patch leaving the workspace untouched.
+# Since the implementation relies on the index it must be empty.  If
+# not all but only a few hunks should be transferred, then git reset
+# --patch HEAD^ (or git gui; amend last, no commit) are more
+# appropriate.
+
+set -e; # set -x
+stg top >/dev/null # Is there stacked git here?
+
+# We need an empty index otherwise it would pollute the patch.
+if git diff --staged | grep -q '.'; then
+    git status
+    1>&2 printf '\nFailed: index already in use\n'
+    return 1
+fi
+local hd; hd=$(git show -s --format=%H HEAD)
+git reset --mixed  HEAD^
+git reset --soft   $hd  # restore HEAD
+stg refresh --index
