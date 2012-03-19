@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Tested with stgit 0.15.  Note that Fedora 16 comes with the quite
+# old and buggy 0.14 version.  Fetch a newer version from Rawhide
+# (it's a noarch rpm ...), if necessary.
+
 # Based on
 # <https://mail.gna.org/public/stgit-users/2011-02/msg00009.html># by
 # Marc Herbert.

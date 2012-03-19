@@ -15,6 +15,9 @@
 # Simple `stg squash' wrapper that simplifies squashing the current
 # patch with the next.
 
+# Tested with stgit 0.15.  Note that Fedora 16 comes with the quite
+# old and buggy 0.14 version.  Fetch a newer version from Rawhide
+# (it's a noarch rpm ...), if necessary.
 
 #!/bin/bash
 
