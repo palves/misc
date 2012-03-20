@@ -1,5 +1,3 @@
-# My quilt aliases.  I have finger memory for these by now...
-
 # Source this file from .bashrc* .
 
 # quilt options.
