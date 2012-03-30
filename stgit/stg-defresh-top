@@ -25,7 +25,7 @@ if git diff --staged | grep -q '.'; then
     1>&2 printf '\nFailed: index already in use\n'
     return 1
 fi
-local hd; hd=$(git show -s --format=%H HEAD)
+hd=$(git show -s --format=%H HEAD)
 git reset --mixed  HEAD^
 git reset --soft   $hd  # restore HEAD
 stg refresh --index
