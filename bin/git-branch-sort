@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+
+open(IN, "git branch |") or die "open git branch";
+
+my @branches;
+
+while (<IN>) {
+    if (/^\*?\s*(\S*)/) {
+	chomp;
+	$branches[$#branches+1] = $1;
+    }
+}
+
+my %branch_time;
+my %branch_date;
+my %branch_hash;
+my %branch_subject;
+
+foreach my $branch (@branches) {
+    my $line = `git show --format="%ct <%ci> %h %s" -s $branch`;
+    chomp $line;
+    if ($line =~ /^(\S+) <(\S+).*?> (\S+) (.*)/) {
+	$branch_time{$branch} = $1;
+	$branch_date{$branch} = $2;
+	$branch_hash{$branch} = $3;
+	$branch_subject{$branch} = $4;
+    }
+}
+
+foreach my $branch (sort { $branch_time{$a} <=> $branch_time{$b} } keys %branch_time) {
+    my $hash = $branch_hash{$branch};
+    my $subject = $branch_subject{$branch};
+    my $date = $branch_date{$branch};
+    printf "%-10s %-13s %-45s %s\n", $hash, $date, $branch, $subject;
+}
