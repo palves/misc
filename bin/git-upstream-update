@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Pull from upstream, and push to github.
+
+set -e
+
+function usage () {
+    echo >&$1 \
+	"usage: $0 [--fetch] [--pull] [--push] [--all]"
+}
+
+fetch=false
+push=false
+pull=false
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+        --all)
+	    push=true
+	    pull=true
+	    ;;
+        --push)
+	    push=true
+	    ;;
+	--pull)
+	    pull=true
+	    ;;
+	--fetch)
+	    fetch=true
+	    ;;
+	-h)
+	    usage 1
+	    exit 0
+	    ;;
+	--)
+	    shift
+	    break
+	    ;;
+	-*)
+	    usage 2
+	    exit 1
+	    ;;
+	*)
+	    break
+	    ;;
+    esac
+    shift
+done
+
+if ! ${fetch} && ! ${push} && ! ${pull} ; then
+    usage 2
+    exit 1;
+fi
+
+if ${fetch}; then
+    echo "Fetching upstream."
+    git fetch upstream
+fi
+
+if ${pull}; then
+    echo "Pulling from upstream into \"upstream\" local branch."
+    git fetch upstream
+    git checkout -q upstream
+    git merge upstream/master
+    git checkout -q @{-1}
+fi
+
+if ${push}; then
+    echo "Pushing \"upstream\" branch to github."
+    git push github upstream:upstream
+fi
