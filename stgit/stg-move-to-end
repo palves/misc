@@ -27,4 +27,4 @@ set -e
 stg hide $*
 stg unhide $*
 
-echo $* moved to top.
+echo $* moved to the end of the series.
