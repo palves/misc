@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Find branches that haven't been rebased on top of binutils-gdb.git.
+
+# Do that by finding branches that contain the old git repo's first
+# commit.
+exec git branch --contains 14cd51f7793a9ce07bc435069f57269450141363
