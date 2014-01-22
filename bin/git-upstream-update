@@ -59,11 +59,20 @@ if ${fetch}; then
 fi
 
 if ${pull}; then
-    echo "Pulling from upstream into \"upstream\" local branch."
+    echo "Fetching upstream remote."
     git fetch upstream
-    git checkout -q upstream
-    git merge upstream/master
-    git checkout -q @{-1}
+
+    curr_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    # If we're on "upstream" currently, merge.  Otherwise, update the
+    # local "upstream" branch without checking it out.
+    if [ "$curr_branch" == "upstream" ]; then
+	echo "Merging from upstream/master into \"upstream\" local branch (checked out)."
+	git merge upstream/master
+    else
+	echo "Pushing from upstream/master into \"upstream\" local branch (not checked out)."
+	git push . upstream/master:upstream
+    fi
 fi
 
 if ${push}; then
