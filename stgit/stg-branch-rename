@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Copyright (C) 2014 Pedro Alves.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Like 'stg branch --rename', but allows renaming the current branch.
+
+set -e
+
+function usage () {
+    echo >&$1 \
+        "usage: $0 [OLD NAME] NEW_NAME"
+}
+
+curr_branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [ $# -eq 1 ]; then
+    from_branch=$curr_branch
+    to_branch=$1
+elif [ $# -eq 2 ]; then
+    from_branch=$1
+    to_branch=$2
+else
+    usage 2
+    exit 1
+fi
+
+if [ "x$from_branch" == "x" ] || [ "x$to_branch" == "x" ]; then
+    usage 2
+fi
+
+if [ "$curr_branch" == "upstream" ]; then
+    echo "Can't rename upstream branch" >2
+    exit 1
+fi
+
+git checkout -q upstream
+stg branch --rename $from_branch $to_branch
+git checkout -q $to_branch
