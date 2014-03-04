@@ -1,0 +1,9 @@
+#!/bin/sh
+
+git show -b ${1+"$@"} | extract-changelog-from-diff
+git show --pretty=format: ${1+"$@"} |
+filterdiff --exclude='ChangeLog*' --exclude='*/ChangeLog*' |
+sed '/^diff --git.*[/ ]ChangeLog.*/{
+N
+d
+}'

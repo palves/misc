@@ -1,0 +1,45 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]; then
+	echo "usage: git-branch-status [branch1] branch2"
+	exit
+fi
+
+if [ $# -lt 2 ]; then
+	b1="HEAD"
+	b2=$1
+else
+	b1=$1
+	b2=$2
+fi
+
+
+c1=`git rev-list $b1..$b2 | wc -l`
+if [ $? -gt 0 ]; then
+	echo error in git
+	exit
+fi
+
+c2=`git rev-list $b2..$b1 | wc -l`
+if [ $? -gt 0 ]; then
+	echo error in git
+	exit
+fi
+
+if [ $c1 -eq 0 -a $c2 -eq 0 ]; then
+	echo "Branch $b1 and $b2 are equal"
+	exit
+fi
+
+if [ $c1 -eq 0 ]; then
+	echo "Branch $b2 can be fast forward to $b1 in $c2 commits"
+	exit
+fi
+
+if [ $c2 -eq 0 ]; then
+	echo "Branch $b1 can be fast forward to $b2 in $c1 commits"
+	exit
+fi
+
+echo "Branch $b1 and $b2"
+echo "differ by $c2 and $c1 commit(s) respectively"

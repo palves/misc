@@ -1,0 +1,6 @@
+#!/bin/bash
+
+file=$1
+
+commit=`git-initial-rev $file`
+git blame -C -C -f $commit^! $file
