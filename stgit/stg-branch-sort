@@ -2,4 +2,9 @@
 
 set -e
 
+# Like git-branch-sort (list branches in last-worked-on chronological
+# order), but filter out internal stgit branches.  I.e., the branch
+# listed at the bottom will be the branch you were working on last
+# night... ;-)
+
 git-branch-sort | grep -v "\.stgit "
