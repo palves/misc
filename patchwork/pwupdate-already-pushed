@@ -14,7 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Automatically accept patches whose subject says "commit", "pushed", or "fyi".
+# Automatically patches whose subject says "commit", "pushed", or
+# "fyi" as 'Committed'
 
 pwclient list -s New |
 grep -i "\[.*commit.*\]\|\[.*pushed.*\]\|\[.*fyi.*\]" |
@@ -22,5 +23,5 @@ cut -f 1 -d ' ' |
 while read patch; do
     printf "updating %d: " $patch
     pwclient info $patch | grep " name *:" | sed 's/^- name *: //'
-    pwclient update -s Accepted $patch
+    pwclient update -s Committed $patch
 done
