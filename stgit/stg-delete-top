@@ -12,7 +12,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Delete the current stgit patch.
+# Delete the current top patch.
+
+# This is deprecated.  "stg delete -t" in newer stgit does the same
+# thing.
 
 # Tested with stgit 0.15.  Note that Fedora 16 comes with the quite
 # old and buggy 0.14 version.  Fetch a newer version from Rawhide
