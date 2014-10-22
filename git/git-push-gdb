@@ -3,7 +3,7 @@
 echo "About to commit the following patches: "
 echo
 
-git --no-pager log upstream/master..HEAD
+git --no-pager log remotes/upstream/master..HEAD
 
 echo
 echo "Make sure you remembered to move ChangeLog entries to their proper places!"
