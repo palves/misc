@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Run "stg refresh" and then run "git diff --check" to show trailing
+# whitespace, etc.
+
+stg refresh && git diff HEAD^ --check | cat
