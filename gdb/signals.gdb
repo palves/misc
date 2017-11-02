@@ -194,13 +194,15 @@ define __isd_print_disposition
       end
     end
     printf "\t"
-    if $_isd_p->__sigaction_handler.sa_handler == 0
+    # Avoid "__sigaction_handler.sa_handler" because of
+    # #define sa_handler __sigaction_handler.sa_handler
+    if (long) $_isd_p->__sigaction_handler == 0
       printf "SIG_DFL\n"
     else
-      if $_isd_p->__sigaction_handler.sa_handler == 1
+      if (long) $_isd_p->__sigaction_handler == 1
 	printf "SIG_IGN\n"
       else
-	info symbol $_isd_p->__sigaction_handler.sa_handler
+	info symbol (long) $_isd_p->__sigaction_handler
       end
     end
   end
