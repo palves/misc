@@ -35,6 +35,6 @@ TMPFILE1=$(mktemp) || exit 1
 TMPFILE2=$(mktemp) || exit 1
 
 sed 's,Running .*/src/gdb/,src/gdb/,g' < $FILE1 > $TMPFILE1
-sed 's,Running .*/src/gdb/,src/gdb/,g' < $FILE2 > $TMPFILE1
+sed 's,Running .*/src/gdb/,src/gdb/,g' < $FILE2 > $TMPFILE2
 
 diff -up $TMPFILE1 $TMPFILE2 "$@" | deja-color | less
