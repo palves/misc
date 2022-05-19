@@ -41,8 +41,8 @@ function print_messages(line, messages, minus_color, plus_color) {
 	red=31
 	green=32
 
-	split ("PASS KPASS", good, " ")
-	split ("FAIL KFAIL ERROR UNRESOLVED UNSUPPORTED", bad, " ")
+	split ("PASS KPASS XPASS", good, " ")
+	split ("FAIL KFAIL XFAIL ERROR UNRESOLVED UNSUPPORTED DUPLICATE PATH", bad, " ")
 
 	if (!print_messages($0, good, red, green) \
 	    && !print_messages($0, bad, green, red)) {
