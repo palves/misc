@@ -7,13 +7,19 @@
 
 # To install for the current boot:
 #
-#  $ echo "|/path/to/core-dispatcher %P" | sudo tee /proc/sys/kernel/core_pattern
+#  $ echo "|/path/to/core-dispatcher %P %p" | sudo tee /proc/sys/kernel/core_pattern
 #
 # To install permanently:
 #
-#  $ echo "kernel.core_pattern=|/path/to/core-dispatcher %P" | sudo tee /etc/sysctl.d/50-coredump.conf
+#  $ echo "kernel.core_pattern=|/path/to/core-dispatcher %P %p" | sudo tee /etc/sysctl.d/50-coredump.conf
 
-CORE_PID=$1
+# PID of dumped process, as seen in the initial PID namespace (since
+# Linux 3.12).  (%P)
+CORE_PID_H=$1
+
+# The PID of the dumped process, as seen in the PID namespace in which
+# the process resides.  (%p)
+CORE_PID_C=$2
 
 log() {
     # echo "$@" >> /var/log/core-dispatcher.log;
@@ -24,10 +30,10 @@ log() {
 # from the core_pattern, but this is easier than implementing
 # proper/non-positional arguments.  :-)
 
-CORE_CWD=$(readlink -f /proc/$CORE_PID/cwd)
-CORE_EXE=$(readlink -f /proc/$CORE_PID/exe)
-CORE_UID=$(stat -c '%u' /proc/$CORE_PID)
-CORE_COMM=$(cat /proc/$CORE_PID/comm)
+CORE_CWD=$(readlink -f /proc/$CORE_PID_H/cwd)
+CORE_EXE=$(readlink -f /proc/$CORE_PID_H/exe)
+CORE_UID=$(stat -c '%u' /proc/$CORE_PID_H)
+CORE_COMM=$(cat /proc/$CORE_PID_H/comm)
 CORE_TIME=$(date '+%s')
 CORE_HOST=$(hostname)
 
@@ -35,11 +41,14 @@ CORE_HOST=$(hostname)
 # below.
 CORE_CWD+="/"
 
-log "CORE_PID=$CORE_PID"
+log "CORE_PID_H=$CORE_PID_H"
+log "CORE_PID_C=$CORE_PID_C"
 log "CORE_CWD=$CORE_CWD"
 log "CORE_EXE=$CORE_EXE"
 
-CORE="core.$CORE_COMM.$CORE_PID.$CORE_HOST.$CORE_TIME"
+# Equivalent to:
+#  kernel.core_pattern=core.%e.%p.%h.%t
+CORE="core.$CORE_COMM.$CORE_PID_C.$CORE_HOST.$CORE_TIME"
 
 case $CORE_CWD in
     /home/pedro/gdb/*)
