@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# kernel.core_pattern script that decides where the core file will go
+# depending on the cwd of the program that crashed.  This is useful if
+# for example, you want all cores to go to /tmp, except cores for
+# programs that run inside some directly, like the GDB testsuite.
+
+# To install for the current boot:
+#
+#  $ echo "|/path/to/core-dispatcher %P" | sudo tee /proc/sys/kernel/core_pattern
+#
+# To install permanently:
+#
+#  $ echo "kernel.core_pattern=|/path/to/core-dispatcher %P" | sudo tee /etc/sysctl.d/50-coredump.conf
+
+CORE_PID=$1
+
+log "dumping core!"
+
+log() {
+    # echo "$@" >> /var/log/core-dispatcher.log;
+    :
+}
+
+# Some of these things would be more efficient to pass in as argument
+# from the core_pattern, but this is easier than implementing
+# proper/non-positional arguments.  :-)
+
+CORE_CWD=$(readlink -f /proc/$CORE_PID/cwd)
+CORE_EXE=$(readlink -f /proc/$CORE_PID/exe)
+CORE_UID=$(stat -c '%u' /proc/$CORE_PID)
+CORE_COMM=$(cat /proc/$CORE_PID/comm)
+CORE_TIME=$(date '+%s')
+CORE_HOST=$(hostname)
+
+# Add trailing slash, to make it easier to pattern match the exact dir
+# below.
+CORE_CWD+="/"
+
+log "CORE_PID=$CORE_PID"
+log "CORE_CWD=$CORE_CWD"
+log "CORE_EXE=$CORE_EXE"
+
+CORE="core.$CORE_COMM.$CORE_PID.$CORE_HOST.$CORE_TIME"
+
+case $CORE_CWD in
+    /home/pedro/gdb/*)
+	CORE_DIR=$CORE_CWD
+	;;
+    *)
+	CORE_DIR=/tmp
+	;;
+esac
+
+# The native dumper doesn't write the file atomically (e.g. write to
+# ".core.tmp" and then "mv .core.tmp core"), so neither do we:
+# https://unix.stackexchange.com/questions/254670/is-core-dump-generation-an-atomic-operation
+
+# Use sudo so that the generated core file is owned by the same user
+# who was running the process that crashed.
+sudo -u \#$CORE_UID sh -c "cat > $CORE_DIR/$CORE"
