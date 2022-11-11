@@ -51,7 +51,7 @@ log "CORE_EXE=$CORE_EXE"
 CORE="core.$CORE_COMM.$CORE_PID_C.$CORE_HOST.$CORE_TIME"
 
 case $CORE_CWD in
-    */gdb/testsuite/*)
+    *build*/gdb/testsuite/*)
 	CORE_DIR=$CORE_CWD
 	;;
     *)
