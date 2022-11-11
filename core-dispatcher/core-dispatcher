@@ -15,8 +15,6 @@
 
 CORE_PID=$1
 
-log "dumping core!"
-
 log() {
     # echo "$@" >> /var/log/core-dispatcher.log;
     :
