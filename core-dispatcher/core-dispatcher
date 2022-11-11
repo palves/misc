@@ -8,10 +8,16 @@
 # To install for the current boot:
 #
 #  $ echo "|/path/to/core-dispatcher %P %p" | sudo tee /proc/sys/kernel/core_pattern
+#  $ echo "1000000" | sudo tee /proc/sys/kernel/core_pipe_limit
 #
-# To install permanently:
+# To install permanently, create a /etc/sysctl.d/50-coredump.conf file with:
 #
-#  $ echo "kernel.core_pattern=|/path/to/core-dispatcher %P %p" | sudo tee /etc/sysctl.d/50-coredump.conf
+#  kernel.core_pattern=|/path/to/core-dispatcher %P %p
+#  kernel.core_pipe_limit=1000000
+#
+# Setting core_pipe_limit to a value different from 0 is necessary
+# because we rely on accessing /proc/<crashing-PID>.
+
 
 # PID of dumped process, as seen in the initial PID namespace (since
 # Linux 3.12).  (%P)
@@ -28,7 +34,10 @@ log() {
 
 # Some of these things would be more efficient to pass in as argument
 # from the core_pattern, but this is easier than implementing
-# proper/non-positional arguments.  :-)
+# proper/non-positional arguments.  :-) Also, not all of these things
+# could be passed down -- e.g., there's no % template spec letter for
+# cwd.  So we have to rely on /proc/<crashing-PID> being available.
+# See /proc/sys/kernel/core_pipe_limit note above.
 
 CORE_CWD=$(readlink -f "/proc/$CORE_PID_H/cwd")
 CORE_EXE=$(readlink -f "/proc/$CORE_PID_H/exe")
