@@ -3,7 +3,7 @@
 # kernel.core_pattern script that decides where the core file will go
 # depending on the cwd of the program that crashed.  This is useful if
 # for example, you want all cores to go to /tmp, except cores for
-# programs that run inside some directly, like the GDB testsuite.
+# programs that run inside some directory, like the GDB testsuite.
 
 # To install for the current boot:
 #
