@@ -30,10 +30,10 @@ log() {
 # from the core_pattern, but this is easier than implementing
 # proper/non-positional arguments.  :-)
 
-CORE_CWD=$(readlink -f /proc/$CORE_PID_H/cwd)
-CORE_EXE=$(readlink -f /proc/$CORE_PID_H/exe)
-CORE_UID=$(stat -c '%u' /proc/$CORE_PID_H)
-CORE_COMM=$(cat /proc/$CORE_PID_H/comm)
+CORE_CWD=$(readlink -f "/proc/$CORE_PID_H/cwd")
+CORE_EXE=$(readlink -f "/proc/$CORE_PID_H/exe")
+CORE_UID=$(stat -c '%u' "/proc/$CORE_PID_H")
+CORE_COMM=$(cat "/proc/$CORE_PID_H/comm")
 CORE_TIME=$(date '+%s')
 CORE_HOST=$(hostname)
 
@@ -66,4 +66,4 @@ esac
 # Use sudo so that the generated core file is owned by the same user
 # who was running the process that crashed.  umask to make it so the
 # core ends up with 600 permissions, same as the native dumper.
-sudo -u \#$CORE_UID sh -c "umask 077; cat > $CORE_DIR/$CORE"
+sudo -u \#"$CORE_UID" sh -c "umask 077; cat > $CORE_DIR/$CORE"
