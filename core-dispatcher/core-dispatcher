@@ -64,5 +64,6 @@ esac
 # https://unix.stackexchange.com/questions/254670/is-core-dump-generation-an-atomic-operation
 
 # Use sudo so that the generated core file is owned by the same user
-# who was running the process that crashed.
-sudo -u \#$CORE_UID sh -c "cat > $CORE_DIR/$CORE"
+# who was running the process that crashed.  umask to make it so the
+# core ends up with 600 permissions, same as the native dumper.
+sudo -u \#$CORE_UID sh -c "umask 077; cat > $CORE_DIR/$CORE"
