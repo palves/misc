@@ -85,8 +85,17 @@ esac
 # The native dumper doesn't write the file atomically (e.g. write to
 # ".core.tmp" and then "mv .core.tmp core"), so neither do we:
 # https://unix.stackexchange.com/questions/254670/is-core-dump-generation-an-atomic-operation
-
+#
 # Use sudo so that the generated core file is owned by the same user
-# who was running the process that crashed.  umask to make it so the
-# core ends up with 600 permissions, same as the native dumper.
-sudo -u \#"$CORE_UID" sh -c "umask 077; cat > $CORE_DIR/$CORE"
+# who was running the process that crashed.
+#
+# Use umask so that the core ends up with 600 permissions, same as the
+# native dumper.
+#
+# Make sparse core files, like the native dumper does.  Note that dd
+# decides whether to seek instead of writing zeroes if it sees a whole
+# block with zeroes.  The kernel skips based on PAGE_SIZE chunks,
+# which is 4096.  Hence the bs below.  Higher block sizes don't seem
+# to speed this up all that much, so might as well pick the same
+# number as the kernel.
+sudo -u \#"$CORE_UID" sh -c "umask 077; dd of=$CORE_DIR/$CORE bs=4096 conv=sparse"
