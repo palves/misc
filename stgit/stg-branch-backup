@@ -35,6 +35,12 @@ fi
 curr_branch=$(stg branch)
 stg branch --clone $backup_branch
 
+new_branch=$(git rev-parse --abbrev-ref HEAD)
+
+# StGit 1 was verbose, but StGit 2 no longer is.  Print the new branch
+# name ourselves.
+echo "Created backup branch: $new_branch"
+
 # Switch back to the original branch.
 # "git co -q" is quieter than "stg branch".
 git checkout -q $curr_branch
