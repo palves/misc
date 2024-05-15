@@ -53,15 +53,10 @@ if ! ${fetch} && ! ${push} && ! ${pull} ; then
     exit 1;
 fi
 
-if ${fetch}; then
-    echo "Fetching upstream."
-    git fetch upstream
-fi
+echo "Fetching upstream."
+git fetch upstream
 
 if ${pull}; then
-    echo "Fetching upstream remote."
-    git fetch upstream
-
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
 
     # If we're on "upstream" currently, merge.  Otherwise, update the
@@ -76,6 +71,6 @@ if ${pull}; then
 fi
 
 if ${push}; then
-    echo "Pushing \"upstream\" branch to github."
-    git push github upstream:upstream
+    echo "Pushing \"remotes/upstream/master\" branch to github."
+    git push github remotes/upstream/master:upstream/master
 fi
