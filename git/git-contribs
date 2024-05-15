@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Shows the git repo's top contributors, like:
+#
+# 17137  John Doe
+#  8355  Jane Smith
+#  7295  Foo Bar
+#  (...)
+#
+exec git shortlog -s -n --no-merges "$@"
