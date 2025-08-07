@@ -1,0 +1,138 @@
+#!/bin/bash
+
+# Copyright (C) 2025 Pedro Alves.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Restore a series of abandoned Gerrit changes.
+
+#!/bin/bash
+
+set -euo pipefail
+
+echoerr() { echo "$@" 1>&2; }
+
+suggest_help() {
+    echo "Try '$0 --help' for more information."
+}
+
+help() {
+    cat <<EOF
+Usage: $0 [OPTIONS] HOSTNAME REVISION
+
+Restore a series of abandoned Gerrit changes by Git revision (hash,
+branch name, tag).
+
+Options:
+  -c,--count COUNT
+         Number of patches to restore starting at the given hash
+         (inclusive).  Defaults to 1.
+  -n,--dry-run
+         Print what would be done, but do not execute.
+  --help
+         Show this help message.
+
+Example:
+  $0 --dry-run gerritgit-server abcdef1 -c 100
+EOF
+}
+
+DRY_RUN=false
+NUM_PATCHES=1
+
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+	-c|--count)
+	    NUM_PATCHES="$2"
+	    shift # past argument
+	    shift # past value
+	    ;;
+	-n|--dry-run)
+	    DRY_RUN=true
+	    shift
+	    ;;
+	--help)
+	    help
+	    exit 0
+	    ;;
+	-*)
+	    echo "$0: unrecognized option '$1'" 1>&2
+	    suggest_help 1>&2
+	    exit 1
+	    ;;
+	*)
+	    POSITIONAL_ARGS+=("$1")
+	    shift
+	    ;;
+    esac
+done
+
+# Restore positional arguments.
+set -- "${POSITIONAL_ARGS[@]}"
+
+if [[ $# -ne 2 ]]; then
+    echoerr "$0: Wrong number of arguments."
+    suggest_help 1>&2
+    exit 1
+fi
+
+SERVER=$1
+TOP_COMMIT=$2
+
+echo "🔍 Extracting $NUM_PATCHES commits ending at $TOP_COMMIT."
+
+# Validate that the top commit exists.
+if ! git cat-file -e "$TOP_COMMIT" 2>/dev/null; then
+    echoerr "❌ Error: Commit $TOP_COMMIT not found in the current Git repository."
+    exit 1
+fi
+
+COMMITS=$(git log --reverse --format="%H" -n "$NUM_PATCHES" "$TOP_COMMIT")
+
+SSH="ssh -x $SERVER"
+
+for HASH in $COMMITS; do
+    # Check if the commit is abandoned in Gerrit.
+    CHANGE_INFO=$($SSH gerrit query "$HASH" --format=JSON \
+		      | jq -c 'select(has("status"))' \
+		      | head -n 1)
+
+    if [[ -z "$CHANGE_INFO" ]]; then
+	echoerr "❌ Error: Commit $TOP_COMMIT is not recognized by Gerrit (no associated change)."
+	exit 1
+    fi
+
+    STATUS=$(echo "$CHANGE_INFO" | jq -r '.status')
+    SUBJECT=$(echo "$CHANGE_INFO" | jq -r '.subject')
+    URL=$(echo "$CHANGE_INFO" | jq -r '.url')
+
+    if [[ "$STATUS" != "ABANDONED" ]]; then
+	echo "✅ $HASH is not abandoned (status=$STATUS), skipping."
+	echo "    $URL"
+	echo "    \"$SUBJECT\""
+	continue
+    fi
+
+    echo "♻️ Restoring $HASH..."
+    echo "    $URL"
+    echo "    \"$SUBJECT\""
+
+    cmd="$SSH gerrit review --restore $HASH"
+    if $DRY_RUN; then
+	echo "[dry-run] $cmd"
+    else
+	$cmd
+    fi
+done
