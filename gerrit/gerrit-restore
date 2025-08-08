@@ -66,10 +66,19 @@ Options:
   --help
          Show this help message.
 
-Example:
-  $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --hash abcdef1 -c 100
-  $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --related 12345678
-  https_proxy=http://proxy-server.local:8080 $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --related 12345678
+Examples:
+
+  - Restore the 100 patches series whose top commit has Git hash abcdef1:
+
+    $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --hash abcdef1 -c 100
+
+  - Restore the series that contains the Gerrit change number 12345678:
+
+    $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --related 12345678
+
+  - Same, but use a HTTPS proxy server:
+
+    https_proxy=http://proxy-server.local:8080 $0 --dry-run --ssh gerritgit-server --rest https://gerrit.local --related 12345678
 
 EOF
 }
@@ -165,8 +174,18 @@ restore() {
     fi
 }
 
+if [ -z "$SSH_SERVER" ]; then
+    echoerr "Must specify --ssh."
+    exit 1
+fi
+
+if [ -z "$REST_SERVER" ]; then
+    echoerr "Must specify --rest."
+    exit 1
+fi
+
 if [ -z "$CHANGE_NUM" ] && [ -z "$TOP_COMMIT" ]; then
-    echoerr "no dataset?"
+    echoerr "Must specify one of --related or --hash."
     exit 1
 fi
 
