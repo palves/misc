@@ -126,8 +126,8 @@ Delete the current top patch.  Nowadays you can use ```stg delete
 
 - ```stgit/stg-move-to-end```
 
-Simple stgit helper script that moves a given patch to the end of #
-the whole series
+Simple stgit helper script that moves a given patch to the end of the
+whole series.
 
 - ```stgit/stg-rebase-upstream```
 
