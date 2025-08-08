@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# Copyright (C) 2025 Pedro Alves.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Restore a series of abandoned Gerrit changes, using the REST
+# interface with curl.
+
+# To use the REST interface, you must create a Gerrit HTTP
+# password/token in the web interface.  The regular login password
+# doesn't work.  See
+# <https://gerrit-review.googlesource.com/Documentation/dev-rest-api.html#_authentication>.
+#
+# You can put the credentials in a the ~/.netrc file.  See "man curl".
+#
+# Curl supports proxying.  If you need it, set the
+# http_proxy/https_proxy environment variables accordingly.
+
+#!/bin/bash
+
+set -euo pipefail
+
+echoerr() { echo "$@" 1>&2; }
+
+suggest_help() {
+    echo "Try '$0 --help' for more information."
+}
+
+help() {
+    cat <<EOF
+Usage: $0 [OPTIONS] SERVER CHANGE_NUM
+
+Restore a series of abandoned Gerrit changes by Gerrit change number.
+
+Options:
+  -n,--dry-run
+         Print what would be done, but do not execute.
+  --help
+         Show this help message.
+
+  SERVER is the gerrit server to connect to via HTTP/HTTPS for REST
+  API calls.
+
+  CHANGE_NUM is the Gerrit change number of one of the commits in a
+  set of related changes.
+
+Examples:
+
+  - Restore the series that contains the Gerrit change number 12345678:
+
+    $0 --dry-run https://gerrit.local 12345678
+
+  - Same, but use a HTTPS proxy server:
+
+    https_proxy=http://proxy-server.local:8080 $0 https://gerrit.local 12345678
+
+EOF
+}
+
+DRY_RUN=false
+CHANGE_NUM=
+GERRIT_SERVER=
+
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+	-n|--dry-run)
+	    DRY_RUN=true
+	    shift
+	    ;;
+	--help)
+	    help
+	    exit 0
+	    ;;
+	-*)
+	    echo "$0: unrecognized option '$1'" 1>&2
+	    suggest_help 1>&2
+	    exit 1
+	    ;;
+	*)
+	    POSITIONAL_ARGS+=("$1")
+	    shift
+	    ;;
+    esac
+done
+
+# Restore positional arguments.
+set -- "${POSITIONAL_ARGS[@]}"
+
+if [[ $# -ne 2 ]]; then
+    echoerr "$0: Wrong number of arguments."
+    suggest_help 1>&2
+    exit 1
+fi
+
+GERRIT_SERVER="$1"
+CHANGE_NUM="$2"
+
+#TMP_RELATED_JSON=/tmp/related.json
+
+TMP_RELATED_JSON=$(mktemp)
+TMP_RESPONSE=$(mktemp)
+trap 'rm -f "$TMP_RELATED_JSON" "$TMP_RESPONSE"' EXIT
+
+if [ -z "$GERRIT_SERVER" ]; then
+    echoerr "Must specify --rest."
+    exit 1
+fi
+
+if [ -z "$CHANGE_NUM" ] && [ -z "$TOP_COMMIT" ]; then
+    echoerr "Must specify one of --related or --hash."
+    exit 1
+fi
+
+echo "🔍 Restoring commits related to change #$CHANGE_NUM."
+
+HTTP_CODE=$(curl --silent --show-error \
+    --output "$TMP_RELATED_JSON" \
+    --write-out "%{http_code}" \
+    --netrc \
+    "$GERRIT_SERVER/a/changes/$CHANGE_NUM/revisions/current/related" || echo "000")
+
+# Handle HTTP errors or curl failures.
+if [[ "$HTTP_CODE" -ne 200 ]]; then
+    # Remove Gerrit's JSON prefix if present and extract error message
+    if [[ -s "$TMP_RELATED_JSON" ]]; then
+        ERR_MSG=$(sed '1d' "$TMP_RELATED_JSON" | jq -r '.message? // empty')
+        if [[ "$ERR_MSG" == *"Not found"* ]]; then
+            echo "❌ Gerrit: Change $CHANGE_NUM not found."
+        elif [[ -n "$ERR_MSG" ]]; then
+            echo "❌ Gerrit error: $ERR_MSG"
+        else
+            echo "❌ Failed to fetch related changes for $CHANGE_NUM (HTTP $HTTP_CODE)"
+        fi
+    else
+        echo "❌ Failed to fetch related changes for $CHANGE_NUM (HTTP $HTTP_CODE)"
+    fi
+    exit 1
+fi
+
+# Remove Gerrit's JSON prefix and store clean JSON.
+RELATED_JSON=$(sed '1d' "$TMP_RELATED_JSON")
+
+# Get count of all related changes.
+TOTAL_CHANGES_COUNT=$(echo "$RELATED_JSON" | jq -c '.changes[]' | wc -l)
+
+# Iterate over abandoned changes: one JSON object per line.
+echo "$RELATED_JSON" | jq -c '.changes[] | select(.status=="ABANDONED")' > "$TMP_RELATED_JSON"
+
+if [[ ! -s "$TMP_RELATED_JSON" ]]; then
+    echo "✅ No abandoned related changes to restore."
+    exit 0
+fi
+
+COUNT=0
+
+while IFS= read -r entry; do
+    # extract fields in a safe way using jq for each JSON entry
+    HASH=$(jq -r '.commit.commit'  <<<"$entry")
+    SUBJECT=$(jq -r '.commit.subject' <<<"$entry")
+    CHG_NUM=$(jq -r '._change_number'  <<<"$entry")
+    STATUS=$(jq -r '.status' <<<"$entry")
+
+    echo "♻ Restoring change $CHG_NUM ($HASH) - $SUBJECT"
+
+    COUNT=$((COUNT + 1))
+
+    if $DRY_RUN; then
+        echo "    🧪 dry-run: skipping restore"
+        continue
+    fi
+
+    RESTORE_PAYLOAD=$(jq -n --arg msg "Restoring change via script (requested by user)" '{message: $msg}')
+
+    HTTP_CODE=$(curl --silent --show-error \
+        --output "$TMP_RESPONSE" \
+        --write-out "%{http_code}" \
+        --netrc \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -d "$RESTORE_PAYLOAD" \
+        "$GERRIT_SERVER/a/changes/$CHG_NUM/restore" || echo "000")
+
+    if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+        echo "    ✅ Restored change $CHG_NUM"
+    else
+        # try to surface a useful message from Gerrit (strip XSSI
+        # prefix).
+        BODY=$(sed '1d' "$TMP_RESPONSE" 2>/dev/null || true)
+        ERR_MSG=$(echo "$BODY" | jq -r '.message? // .error? // empty' 2>/dev/null || true)
+        echo "    ❌ Failed to restore change $CHG_NUM (HTTP $HTTP_CODE)"
+        if [[ -n "$ERR_MSG" ]]; then
+            echo "       Gerrit said: $ERR_MSG"
+        else
+            echo "       Response saved to $TMP_RESPONSE"
+        fi
+    fi
+
+done < "$TMP_RELATED_JSON"
+
+if $DRY_RUN; then
+    echo "📝 Dry-run: $COUNT change(s) out of $TOTAL_CHANGES_COUNT total would be restored."
+else
+    echo "✅ Restored $COUNT change(s) out of $TOTAL_CHANGES_COUNT total."
+fi

@@ -24,9 +24,18 @@ Diff two DejaGnu sum files, and run the output through
 Adds a useful "info signal-dispositions" command to GDB, a command
 that lists signal dispositions.
 
-- ```gerrit/gerrit-restore```
+- ```gerrit/gerrit-restore-rest```
 
-Batch-restore a series of abandoned Gerrit changes.
+Batch-restore a series of abandoned Gerrit changes, using the REST
+interface.  This is the easiest to use, it can retrieve the set of
+related patches of a series automatically for you.  However, it
+requires setting up a HTTP password/token in Gerrit.
+
+- ```gerrit/gerrit-restore-ssh```
+
+Batch-restore a series of abandoned Gerrit changes, using SSH.  This
+is not as easy to use, but does not require setting up a HTTP
+password/token in Gerrit.
 
 - ```git/git-branch-sort```
 

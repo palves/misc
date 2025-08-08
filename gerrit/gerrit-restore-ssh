@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# Copyright (C) 2025 Pedro Alves.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Restore a series of abandoned Gerrit changes, using SSH.
+
+# Unlike gerrit-restore-rest, which uses the REST interface, this does
+# not require setting up a HTTP password/token in the Gerrit web
+# interface.
+#
+# However, with this approach, you must:
+#
+# - Run the command from a git checkout that contains the changes to
+#   restore.
+# 
+# - Specify both the top commit, and the number of patches in the
+#   series.
+#
+# This is because the "gerrit" command (run with ssh) does not support
+# retrieving the set of related changes of a given change, so we find
+# the set of patches to restore using "git log", locally.
+
+#!/bin/bash
+
+set -euo pipefail
+
+echoerr() { echo "$@" 1>&2; }
+
+suggest_help() {
+    echo "Try '$0 --help' for more information."
+}
+
+help() {
+    cat <<EOF
+Usage: $0 [OPTIONS] HOSTNAME REVISION
+
+Restore a series of abandoned Gerrit changes by Gerrit change number
+or Git revision (hash, branch name, tag) or .
+
+Options:
+  -c,--count COUNT
+         Number of changes to restore starting at the given git hash
+         (inclusive).  Defaults to 1.  Requires --hash.
+  -n,--dry-run
+         Print what would be done, but do not execute.
+  --help
+         Show this help message.
+
+  HOSTNAME is the gerrit server to connect to via SSH.
+
+  GIT_REVISION is the Git revision (hash, branch, etc.) of the top
+  commit to restore.
+
+Example:
+
+  - Restore the 100 patches series whose top commit has Git hash abcdef1:
+
+    $0 --dry-run gerritgit-server abcdef1 -c 100
+EOF
+}
+
+DRY_RUN=false
+NUM_PATCHES=1
+TOP_COMMIT=
+
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+	-c|--count)
+	    NUM_PATCHES="$2"
+	    shift
+	    shift
+	    ;;
+	-n|--dry-run)
+	    DRY_RUN=true
+	    shift
+	    ;;
+	--help)
+	    help
+	    exit 0
+	    ;;
+	-*)
+	    echo "$0: unrecognized option '$1'" 1>&2
+	    suggest_help 1>&2
+	    exit 1
+	    ;;
+	*)
+	    POSITIONAL_ARGS+=("$1")
+	    shift
+	    ;;
+    esac
+done
+
+# Restore positional arguments.
+set -- "${POSITIONAL_ARGS[@]}"
+
+if [[ $# -ne 2 ]]; then
+    echoerr "$0: Wrong number of arguments."
+    suggest_help 1>&2
+    exit 1
+fi
+
+GERRIT_SERVER="$1"
+TOP_COMMIT="$2"
+
+SSH="ssh -x $GERRIT_SERVER"
+
+echo "🔍 Extracting $NUM_PATCHES commits ending at $TOP_COMMIT."
+
+# Validate that the top commit exists.
+if ! git cat-file -e "$TOP_COMMIT" 2>/dev/null; then
+    echoerr "❌ Error: Commit $TOP_COMMIT not found in the current Git repository."
+    exit 1
+fi
+
+COMMITS=$(git log --reverse --format="%H" -n "$NUM_PATCHES" "$TOP_COMMIT")
+
+for HASH in $COMMITS; do
+    # Check if the commit is abandoned in Gerrit.
+    CHANGE_INFO=$($SSH gerrit query "$HASH" --format=JSON \
+		      | jq -c 'select(has("status"))' \
+		      | head -n 1)
+
+    if [[ -z "$CHANGE_INFO" ]]; then
+	echoerr "❌ Error: Commit $TOP_COMMIT is not recognized by Gerrit (no associated change)."
+	exit 1
+    fi
+
+    CHG_NUM=$(echo "$CHANGE_INFO" | jq -r '.number')
+    STATUS=$(echo "$CHANGE_INFO" | jq -r '.status')
+    SUBJECT=$(echo "$CHANGE_INFO" | jq -r '.subject')
+    URL=$(echo "$CHANGE_INFO" | jq -r '.url')
+
+    echo "♻ Restoring change $CHG_NUM ($HASH) - $SUBJECT"
+
+    if [[ "$STATUS" != "ABANDONED" ]]; then
+	echo "    ✅ $HASH is not abandoned (status=$STATUS), skipping."
+	return
+    fi
+
+    if $DRY_RUN; then
+        echo "    🧪 dry-run: skipping restore"
+	continue
+    fi
+
+    $SSH gerrit review --restore $HASH
+
+    echo "    ✅ Restored change $CHG_NUM"
+done
