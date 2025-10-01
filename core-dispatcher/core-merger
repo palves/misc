@@ -1,0 +1,315 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Author  : Pedro Alves (pedro@palves.net)
+
+set -euo pipefail
+
+# kernel.core_pattern script that merges a ROCm core into the CPU core
+# dump, using roccoremerge.  See "--help" for more info, including how
+# to install.
+
+ME=$(basename "$0")
+
+suggest_help() {
+    echo "Try '$ME --help' for more information."
+}
+
+help() {
+    cat <<EOF
+Usage: $ME %P %p [OPT]... [CMD]
+
+A kernel.core_pattern script that merges a ROCm core into the CPU core
+dump, using roccoremerge.  It can be either used as a wrapper around
+other kernel.core_pattern scripts, or as standalone
+kernel.core_pattern script with a regular non-pipe core pattern.
+
+Options:
+
+  --pattern PATTERN		   A non-pipe /proc/sys/kernel/core_pattern
+			   template used to name the final merged core
+			   dump file.
+  -l, --log LOGFILE	   Enable logging to LOGFILE.
+  -h, --help		   Display this help and exit.
+  --                       Stop processing command line arguments.
+
+If a pattern is not specificed with --pattern, then the remainder of
+the positional command line parameters are interpreted as the
+command-line for a user-space program (or script) that is to be
+executed.  Instead of being written to a file, the core dump is given
+as standard input to this program.
+
+Installation:
+
+To install for the current boot, you can write to
+/proc/sys/kernel/core_pattern directly.
+
+If you want a simple non-pipe core_pattern template like "core.%p",
+do:
+
+ $ echo "|/path/to/core-merger %P %p --pattern core.%p | sudo tee /proc/sys/kernel/core_pattern
+
+To set up core-merger as wrapper to the program that you otherwise
+have installed as core_pattern, do:
+
+ $ echo "|/path/to/core-merger %P %p /path/to/program <args>" | sudo tee /proc/sys/kernel/core_pattern
+
+Setting core_pipe_limit to a value different from 0 is also necessary
+because we rely on accessing /proc/<crashing-PID>:
+
+ $ echo "1000000" | sudo tee /proc/sys/kernel/core_pipe_limit
+
+See "man core" for more information about that.
+
+E.g., to wrap apport:
+
+ $ cat /proc/sys/kernel/core_pattern
+ |/usr/share/apport/apport %p %s %c
+ $ echo "|/path/to/core-merger %P %p /usr/share/apport/apport %p %s %c" | sudo tee /proc/sys/kernel/core_pattern
+
+Another example, this time wrapping core-dispatcher:
+
+ $ echo "|/path/to/core-merger %P %p /path/to/core-dispatcher %P %p" | sudo tee /proc/sys/kernel/core_pattern
+
+To install permanently, create a conf file under /etc/sysctl.d, for
+example /etc/sysctl.d/99-core-merger.conf, with:
+
+ kernel.core_pattern=|/path/to/core-merger %P %p /path/to/program <args>
+ kernel.core_pipe_limit=1000000
+EOF
+}
+
+echoerr() { echo "$@" 1>&2; }
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOGFILE";
+}
+
+# Log and exit with status.
+do_exit() {
+    local status=$1
+    log "exiting with status $status"
+    exit "$status"
+}
+
+# Run a command and exit with the command's exit status.  This avoids
+# replacing the shell process (like exec does) so that traps and
+# cleanup routines can execute before exiting.
+fake_exec() {
+    "$@"
+    do_exit $?
+}
+
+LOGFILE="/dev/null"
+PATTERN=
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+	--pattern)
+	    PATTERN=$2
+	    # Past argument.
+	    shift
+	    # Past value.
+	    shift
+	    ;;
+	-h|--help)
+	    help
+	    exit 0
+	    ;;
+	-l|--log)
+	    LOGFILE=$2
+	    # Past argument.
+	    shift
+	    # Past value.
+	    shift
+	    ;;
+	--)
+	    # Past argument.
+	    shift
+	    break
+	    ;;
+	-*)
+	    echoerr "$ME: unrecognized option '$1'"
+	    suggest_help 1>&2
+	    exit 1
+	    ;;
+	*)
+	    # Save positional argument.
+	    POSITIONAL_ARGS+=("$1")
+	    # Past argument.
+	    shift
+	    ;;
+    esac
+done
+
+# Restore positional parameters.
+set -- "${POSITIONAL_ARGS[@]}"
+
+if [ "$#" -lt 2 ]; then
+    suggest_help 1>&2
+    exit 1
+fi
+
+log "=========== core-merger running ==========="
+
+# PID of dumped process, as seen in the initial PID namespace (since
+# Linux 3.12).  (%P)
+CORE_PID_H=$1
+
+# The PID of the dumped process, as seen in the PID namespace in which
+# the process resides.  (%p)
+CORE_PID_C=$2
+
+log "CORE_PID_H=$CORE_PID_H"
+log "CORE_PID_C=$CORE_PID_C"
+
+log "PATTERN=$PATTERN"
+
+# The remaining args are the wrapped program + its args.
+shift 2
+WRAPPED_PROG=("$@")
+
+# Gather process info.
+
+# Refuse to proceed if core_pipe_limit == 0, because we rely on
+# inspecting /proc/<pid> with no races.  See "man core".
+if [ "$(cat /proc/sys/kernel/core_pipe_limit)" -eq 0 ]; then
+    # For the --pattern case, we can't (reliably) know the dumping
+    # process CWD, so we can't preserve the CPU core.  For simplicity,
+    # behave the same for the forwarding case too.  This should also
+    # help with someone noticing something is really off...
+    log "kernel.core_pipe_limit must be nonzero, keeping GPU core, discarding CPU core"
+    do_exit 1
+fi
+
+# Some of these things would be more efficient to pass in as argument
+# from the core_pattern, but this is easier than implementing
+# proper/non-positional arguments.  :-)  Also, not all of these things
+# could be passed down -- e.g., there's no % template spec letter for
+# cwd.  So we have to rely on /proc/<crashing-PID> being available.
+# See /proc/sys/kernel/core_pipe_limit note above.
+
+CORE_CWD=$(readlink -f "/proc/$CORE_PID_H/cwd")
+CORE_UID=$(stat -c '%u' "/proc/$CORE_PID_H")
+
+log "CORE_CWD=$CORE_CWD"
+log "CORE_UID=$CORE_UID"
+
+# Run a command as the dumped process owner with umask 077.
+#
+# Use sudo so that the generated core file is owned by the same user
+# who was running the process that crashed.
+#
+# Use umask so that the core ends up with 600 permissions, same as the
+# native dumper.
+sudo_umask() {
+    sudo -u \#"$CORE_UID" sh -c "umask 077; $*"
+}
+
+# Cd to the dumped process cwd, in case we have a pattern like
+# "core.%p".
+if ! cd "$CORE_CWD" 2>> "$LOGFILE"; then
+    log "failed to cd to dumped process cwd: $CORE_CWD"
+    do_exit 1
+fi
+
+# Temporary file for CPU core.
+CPUCORE=$(sudo_umask "mktemp --tmpdir core-merger-cpucore.XXXXXX")
+
+# Where the ROCm runtime dumps the GPU core for this process.
+GPUCORE="$CORE_CWD/gpucore.$CORE_PID_C"
+
+log "CPUCORE=$CPUCORE"
+log "GPUCORE=$GPUCORE"
+
+# Save stdin (CPU core) into a file.
+save_cpucore() {
+    DEST=$1
+
+    # The native kernel dumper doesn't write the file atomically
+    # (e.g. write to ".core.tmp" and then "mv .core.tmp core"), so
+    # neither do we:
+    # https://unix.stackexchange.com/questions/254670/is-core-dump-generation-an-atomic-operation
+    #
+    # Make sparse core files, like the native dumper does.  Note that
+    # dd decides whether to seek instead of writing zeroes if it sees
+    # a whole block with zeroes.  The kernel skips based on PAGE_SIZE
+    # chunks, which is 4096.  Hence the bs below.  Higher block sizes
+    # don't seem to speed this up all that much, so might as well pick
+    # the same number as the kernel.
+
+    # Save stdin (CPU core) into a temp file.
+    sudo_umask "dd of=\"$DEST\" bs=4096 conv=sparse" 2>> "$LOGFILE"
+}
+
+# If no GPU core exists, just forward the CPU core.
+if [ ! -e "$GPUCORE" ]; then
+    if [ -n "$PATTERN" ]; then
+	log "GPU core not found, saving CPU core to $PATTERN"
+	save_cpucore "$PATTERN"
+	do_exit 0
+    else
+	log "GPU core not found, passing CPU core"
+	fake_exec "${WRAPPED_PROG[@]}"
+    fi
+fi
+
+log "GPU core found"
+
+# If we're wrapping another program, then the combined core is put in
+# a temporary file.  Otherwise, we have its final destination, and we
+# write there directly.
+if [ -n "$PATTERN" ]; then
+    COMBINED_CORE="$PATTERN"
+else
+    COMBINED_CORE=$(sudo_umask "mktemp --tmpdir core-merger-core.XXXXXX")
+fi
+
+log "COMBINED_CORE=$COMBINED_CORE"
+
+# ShellCheck is currently bad at figuring out functions that are
+# invoked via trap.
+# shellcheck disable=SC2329
+cleanup() {
+    rm -f -- "$CPUCORE"
+    if [ ! -n "$PATTERN" ]; then
+	rm -f -- "$COMBINED_CORE"
+    fi
+}
+trap cleanup EXIT INT TERM
+
+log "saving CPU core to temp file"
+
+# Save stdin (CPU core) into a temp file.
+save_cpucore "$CPUCORE"
+
+log "merging CPU + GPU cores"
+
+# Merge CPU + GPU cores.
+if ! sudo_umask \
+     "/opt/rocm/bin/roccoremerge -f \"$COMBINED_CORE\" \"$CPUCORE\" \"$GPUCORE\"" \
+     2>> "$LOGFILE"; then
+    if [ -n "$PATTERN" ]; then
+	log "roccoremerge failed, keeping GPU core, saving CPU core to $PATTERN"
+	mv "$CPUCORE" "$PATTERN"
+	do_exit 1
+    else
+	log "roccoremerge failed, keeping GPU core, streaming CPU core"
+	fake_exec "${WRAPPED_PROG[@]}" < "$CPUCORE"
+    fi
+fi
+
+# We don't need these two anymore, remove them to save e.g. tmpfs
+# space.
+log "removing temporary CPU and GPU cores"
+rm -f -- "$CPUCORE" "$GPUCORE"
+
+# If we have a pattern, we're done.  If we are wrapping some other
+# program, then stream the temporary combined core to the wrapped
+# program.
+if [ ! -n "$PATTERN" ]; then
+    log "streaming merged core to wrapped program"
+    fake_exec "${WRAPPED_PROG[@]}" < "$COMBINED_CORE"
+else
+    do_exit 0
+fi
