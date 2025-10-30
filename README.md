@@ -19,6 +19,11 @@ red, progressions in green.
 Diff two DejaGnu sum files, and run the output through
 ```deja-color``` for colorization.
 
+- ```dejagnu/deja-summary```
+
+Summarize DejaGnu sum results by test file.  With --pass, prints only
+test files with all PASS results.
+
 - ```gdb/signals.gdb```
 
 Adds a useful "info signal-dispositions" command to GDB, a command

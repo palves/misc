@@ -1,0 +1,158 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Author  : Pedro Alves (pedro@palves.net)
+
+set -euo pipefail
+
+ME=$(basename "$0")
+
+echoerr() { echo "$@" 1>&2; }
+
+suggest_help() {
+    echo "Try '$ME --help' for more information."
+}
+
+help() {
+    cat <<EOF
+Usage:  deja-summary [OPT]... [gdb.sum]
+
+Summarize DejaGnu sum results by test file.  By default, prints a
+summary of all result types for each test.  If no file is provided,
+reads from standard input.
+
+Options:
+  --pass		   Prints only test files with all PASS results.
+  --names		   Prints only test file names without summaries.
+  -h, --help		   Display this help and exit.
+EOF
+}
+
+pass_only=0
+names_only=0
+input="-"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+	-h|--help)
+	    help
+	    exit 0
+	    ;;
+	--pass)
+	    pass_only=1
+	    shift
+	    ;;
+	--names)
+	    names_only=1
+	    shift
+	    ;;
+	-*)
+	    echoerr "$ME: unrecognized option '$1'"
+	    suggest_help 1>&2
+	    exit 1
+	    ;;
+	*)
+	    POSITIONAL_ARGS+=("$1")
+	    shift
+	    ;;
+    esac
+done
+
+# Restore positional parameters.
+set -- "${POSITIONAL_ARGS[@]}"
+
+if [ "$#" -lt 1 ]; then
+    input="-"
+elif [ "$#" -gt 1 ]; then
+    suggest_help 1>&2
+    exit 1
+else
+    input="$1"
+fi
+
+awk -v pass_only="$pass_only" -v names_only="$names_only" '
+  BEGIN {
+    test = "";
+  }
+
+  /* Match the start of a test file block.  */
+  /^Running / {
+    if (test != "")
+      check_test();
+    test = $2;
+    delete results;
+    pass_count = 0;
+    next;
+  }
+
+  /* Record each result line and count occurrences.  */
+  /^[A-Z]+:/ {
+    outcome = $1;
+    sub(/:$/, "", outcome);  /* Remove trailing colon.  */
+    results[outcome]++;
+    if (outcome == "PASS")
+      pass_count++;
+    next;
+  }
+
+  /* At the end of the file, process the final test.  */
+  END {
+    if (test != "")
+      check_test();
+  }
+
+  /* Function to shorten the test path to last two components.  */
+  function short_name(path, parts, n) {
+    n = split(path, parts, "/");
+    if (n >= 2)
+      return parts[n - 1] "/" parts[n];
+    else
+      return path;
+  }
+
+  /* Lexicographically sort an array of keys.  */
+  function sort_keys(src, keys, n, i, j, tmp) {
+    n = 0;
+    for (k in src)
+      keys[++n] = k;
+    for (i = 1; i <= n; i++)
+      for (j = i + 1; j <= n; j++)
+        if (keys[j] < keys[i]) {
+          tmp = keys[i];
+          keys[i] = keys[j];
+          keys[j] = tmp;
+        }
+    return n;
+  }
+
+  /* Function to print or check the current test.  */
+  function check_test(k, ok, summary, keys, nkeys, i) {
+    /* Skip tests with no results at all.  */
+    if (length(results) == 0)
+      return;
+
+    ok = 1;
+    for (k in results)
+      if (k != "PASS")
+        ok = 0;
+
+    if (pass_only && !ok)
+      return;
+
+    name = short_name(test);
+
+    if (names_only) {
+      print name;
+      return;
+    }
+
+    if (pass_only) {
+      printf "%-50s  %5d PASS\n", name, pass_count;
+    } else {
+      summary = "";
+      nkeys = sort_keys(results, keys);
+      for (i = 1; i <= nkeys; i++)
+        summary = summary sprintf("%s=%d ", keys[i], results[keys[i]]);
+      printf "%-50s  %s\n", name, summary;
+    }
+  }
+' "$input"
