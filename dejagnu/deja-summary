@@ -22,12 +22,16 @@ reads from standard input.
 
 Options:
   --pass		   Prints only test files with all PASS results.
+  --problem		   Prints only test files with problems.  I.e.,
+			     skips printing test files with all
+			     PASS/UNSUPPORTED results.
   --names		   Prints only test file names without summaries.
   -h, --help		   Display this help and exit.
 EOF
 }
 
 pass_only=0
+problem_only=0
 names_only=0
 input="-"
 
@@ -39,6 +43,10 @@ while [[ $# -gt 0 ]]; do
 	    ;;
 	--pass)
 	    pass_only=1
+	    shift
+	    ;;
+	--problem)
+	    problem_only=1
 	    shift
 	    ;;
 	--names)
@@ -69,7 +77,7 @@ else
     input="$1"
 fi
 
-awk -v pass_only="$pass_only" -v names_only="$names_only" '
+awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$names_only" '
   BEGIN {
     test = "";
   }
@@ -130,13 +138,21 @@ awk -v pass_only="$pass_only" -v names_only="$names_only" '
     if (length(results) == 0)
       return;
 
-    ok = 1;
-    for (k in results)
-      if (k != "PASS")
-        ok = 0;
-
-    if (pass_only && !ok)
-      return;
+    if (pass_only) {
+      for (k in results)
+	if (k != "PASS")
+	  return;
+    }
+    if (problem_only) {
+      skip = 1;
+      for (k in results)
+	if (k != "PASS" && k != "UNSUPPORTED") {
+	  skip = 0;
+	  break;
+	}
+      if (skip)
+	return;
+    }
 
     name = short_name(test);
 
