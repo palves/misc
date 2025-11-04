@@ -140,13 +140,13 @@ awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$na
 
     if (pass_only) {
       for (k in results)
-	if (k != "PASS")
+	if (k != "PASS" && k != "XFAIL" && k != "KFAIL")
 	  return;
     }
     if (problem_only) {
       skip = 1;
       for (k in results)
-	if (k != "PASS" && k != "UNSUPPORTED") {
+	if (k != "PASS" && k != "UNSUPPORTED" && k != "XFAIL" && k != "KFAIL") {
 	  skip = 0;
 	  break;
 	}
@@ -161,14 +161,10 @@ awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$na
       return;
     }
 
-    if (pass_only) {
-      printf "%-50s  %5d PASS\n", name, pass_count;
-    } else {
-      summary = "";
-      nkeys = sort_keys(results, keys);
-      for (i = 1; i <= nkeys; i++)
-        summary = summary sprintf("%s=%d ", keys[i], results[keys[i]]);
-      printf "%-50s  %s\n", name, summary;
-    }
+    summary = "";
+    nkeys = sort_keys(results, keys);
+    for (i = 1; i <= nkeys; i++)
+      summary = summary sprintf("%s=%d ", keys[i], results[keys[i]]);
+    printf "%-50s  %s\n", name, summary;
   }
 ' "$input"
