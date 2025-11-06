@@ -109,7 +109,7 @@ awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$na
   }
 
   /* Function to shorten the test path to last two components.  */
-  function short_name(path, parts, n) {
+  function short_name(path,    parts, n) {
     n = split(path, parts, "/");
     if (n >= 2)
       return parts[n - 1] "/" parts[n];
@@ -118,7 +118,7 @@ awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$na
   }
 
   /* Lexicographically sort an array of keys.  */
-  function sort_keys(src, keys, n, i, j, tmp) {
+  function sort_keys(src, keys,    n, i, j, tmp) {
     n = 0;
     for (k in src)
       keys[++n] = k;
@@ -133,7 +133,7 @@ awk -v pass_only="$pass_only" -v problem_only="$problem_only" -v names_only="$na
   }
 
   /* Function to print or check the current test.  */
-  function check_test(k, ok, summary, keys, nkeys, i) {
+  function check_test(    k, ok, summary, keys, nkeys, i) {
     /* Skip tests with no results at all.  */
     if (length(results) == 0)
       return;
