@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+
+# A wrapper for "docker ps" that lists container owner info injected
+# by the docker wrapper script.
+
+# Report bugs and improvements to https://github.com/palves/misc/.
+
+set -euo pipefail
+
+LABEL_PREFIX="com.amd.shared-server"
+
+# The standard "STATUS" column in "docker ps" tells you how long a
+# container has been in its current execution state (e.g., Up 2 hours
+# or Exited (0) 3 weeks ago).  The moment a container is paused,
+# restarted, or crashes and restarts, that clock reset.  OTOH, our
+# custom timestamp captures the exact moment the container was
+# breathed into existence (docker run).  It is immutable and never
+# resets, no matter how many times the container is stopped, started,
+# or restarted.
+exec docker ps \
+  --format "table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Label \"$LABEL_PREFIX.owner\"}}\t{{.Label \"$LABEL_PREFIX.started_at\"}}\t{{.Status}}" "$@"

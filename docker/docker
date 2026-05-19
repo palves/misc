@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+#
+# A wrapper for the docker CLI on shared builder servers, that
+# automatically injects owner metadata as labels into containers at
+# runtime.
+#
+# List container owner info using the docker-ps-owner script.
+
+# Report bugs and improvements to https://github.com/palves/misc/.
+
+set -euo pipefail
+
+LABEL_PREFIX="com.amd.shared-server"
+
+# Locate the real docker binary.  Look for the first 'docker' in PATH
+# that isn't this script itself.
+REAL_DOCKER=""
+IFS=':' read -ra PATH_DIRS <<< "$PATH"
+for dir in "${PATH_DIRS[@]}"; do
+    if [ -x "$dir/docker" ] && [ "$dir/docker" != "$0" ]; then
+	REAL_DOCKER="$dir/docker"
+	break
+    fi
+done
+
+if [ -z "$REAL_DOCKER" ]; then
+    echo "Error: Real docker binary not found in PATH." >&2
+    exit 1
+fi
+
+# Identify the true invoking user.  If a developer used 'sudo docker',
+# $USER becomes 'root'.  We check $SUDO_USER to capture their actual
+# identity.
+INVOKING_USER="${SUDO_USER:-$USER}"
+
+# Intercept container creation commands to inject labels.
+COMMAND="${1:-}"
+if [ "$COMMAND" = "run" ] || [ "$COMMAND" = "create" ]; then
+    shift
+
+    # Define our tracking labels.
+    OWNER_LABEL="${LABEL_PREFIX}.owner=${INVOKING_USER}"
+    # A standardized, predictable ISO-8601 timestamp.
+    TIME_LABEL="${LABEL_PREFIX}.started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+    # Execute the real docker command with our labels injected right
+    # at the front.
+    exec "$REAL_DOCKER" "$COMMAND" \
+	 --label "$OWNER_LABEL" --label "$TIME_LABEL" \
+	 "$@"
+else
+    # For any other docker command (ps, build, images, etc.), pass
+    # through transparently.
+    exec "$REAL_DOCKER" "$@"
+fi
