@@ -6,7 +6,7 @@
 # automatically injects owner metadata as labels into containers at
 # runtime.
 #
-# List container owner info using the docker-ps-owner script.
+# List container owner info using the docker-owner script.
 
 # Report bugs and improvements to https://github.com/palves/misc/.
 
