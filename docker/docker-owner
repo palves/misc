@@ -20,4 +20,4 @@ LABEL_PREFIX="com.amd.shared-server"
 # resets, no matter how many times the container is stopped, started,
 # or restarted.
 exec docker ps \
-  --format "table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Label \"$LABEL_PREFIX.owner\"}}\t{{.Label \"$LABEL_PREFIX.started_at\"}}\t{{.Status}}" "$@"
+  --format "table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Label \"$LABEL_PREFIX.owner\"}}\t{{.Label \"$LABEL_PREFIX.started_at\"}}\t{{.RunningFor}}\t{{.Status}}" "$@"
